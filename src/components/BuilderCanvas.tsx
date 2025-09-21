@@ -35,29 +35,49 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onMoveNode,
 }) => {
   const handleDragOver = (event: React.DragEvent, targetId: string | null) => {
-    const raw = event.dataTransfer.getData(dropDataMime);
-    if (!raw) {
+    const hasBuilderData = Array.from(event.dataTransfer.types).includes(dropDataMime);
+    if (!hasBuilderData) {
       return;
     }
+
+    let allowDrop = true;
+    let dropEffect: DataTransfer['dropEffect'] = 'move';
+
     try {
-      const payload = JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
-      if (!canDropOnTarget(nodes, targetId, payload.type)) {
-        event.dataTransfer.dropEffect = 'none';
-        return;
+      const raw = event.dataTransfer.getData(dropDataMime);
+      if (raw) {
+        const payload = JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
+        if (!canDropOnTarget(nodes, targetId, payload.type)) {
+          allowDrop = false;
+        } else if (
+          payload.mode === 'move' &&
+          payload.nodeId &&
+          targetId &&
+          isDescendant(nodes, payload.nodeId, targetId)
+        ) {
+          allowDrop = false;
+        } else {
+          dropEffect = payload.mode === 'new' ? 'copy' : 'move';
+        }
+      } else {
+        dropEffect = 'copy';
       }
-      if (payload.mode === 'move' && payload.nodeId && targetId && isDescendant(nodes, payload.nodeId, targetId)) {
-        event.dataTransfer.dropEffect = 'none';
-        return;
-      }
-      event.preventDefault();
-      event.dataTransfer.dropEffect = payload.mode === 'new' ? 'copy' : 'move';
     } catch (error) {
-      // ignore
+      dropEffect = 'copy';
     }
+
+    if (!allowDrop) {
+      event.dataTransfer.dropEffect = 'none';
+      return;
+    }
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = dropEffect;
   };
 
   const handleDrop = (event: React.DragEvent, targetId: string | null) => {
-    const raw = event.dataTransfer.getData(dropDataMime);
+    const raw =
+      event.dataTransfer.getData(dropDataMime) || event.dataTransfer.getData('text/plain');
     if (!raw) {
       return;
     }
@@ -159,10 +179,9 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
     const handleNodeDragStart = (event: React.DragEvent) => {
       event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData(
-        dropDataMime,
-        JSON.stringify({ mode: 'move', nodeId: node.id, type: node.type })
-      );
+      const payload = JSON.stringify({ mode: 'move', nodeId: node.id, type: node.type });
+      event.dataTransfer.setData(dropDataMime, payload);
+      event.dataTransfer.setData('text/plain', payload);
     };
 
     const droppableProps = config.supportsChildren

@@ -37,6 +37,10 @@
   flex-direction: column;
 }
 
+.app-panel-left {
+  overflow-y: auto;
+}
+
 .app-panel-right {
   overflow-y: auto;
 }

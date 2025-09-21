@@ -28,10 +28,9 @@ const ComponentPalette: React.FC<ComponentPaletteProps> = ({ onStartDrag }) => {
             draggable
             onDragStart={(event) => {
               event.dataTransfer.effectAllowed = 'copy';
-              event.dataTransfer.setData(
-                'application/x-builder',
-                JSON.stringify({ mode: 'new', type: config.type })
-              );
+              const payload = JSON.stringify({ mode: 'new', type: config.type });
+              event.dataTransfer.setData('application/x-builder', payload);
+              event.dataTransfer.setData('text/plain', payload);
               onStartDrag(config.type);
             }}
           >
