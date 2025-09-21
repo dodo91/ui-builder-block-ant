@@ -34,50 +34,72 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onDropNew,
   onMoveNode,
 }) => {
-  const handleDragOver = (event: React.DragEvent, targetId: string | null) => {
+  const extractPayload = (
+    event: React.DragEvent
+  ): { mode: string; type: ComponentType; nodeId?: string } | undefined => {
     const raw = event.dataTransfer.getData(dropDataMime);
     if (!raw) {
-      return;
+      return undefined;
     }
     try {
-      const payload = JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
-      if (!canDropOnTarget(nodes, targetId, payload.type)) {
-        event.dataTransfer.dropEffect = 'none';
-        return;
-      }
-      if (payload.mode === 'move' && payload.nodeId && targetId && isDescendant(nodes, payload.nodeId, targetId)) {
-        event.dataTransfer.dropEffect = 'none';
-        return;
-      }
-      event.preventDefault();
-      event.dataTransfer.dropEffect = payload.mode === 'new' ? 'copy' : 'move';
+      return JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
     } catch (error) {
-      // ignore
+      return undefined;
     }
   };
 
-  const handleDrop = (event: React.DragEvent, targetId: string | null) => {
-    const raw = event.dataTransfer.getData(dropDataMime);
-    if (!raw) {
+  const handleDragOver = (event: React.DragEvent, targetId: string | null) => {
+    const types = Array.from(event.dataTransfer.types);
+    if (!types.includes(dropDataMime)) {
       return;
     }
+
+    event.preventDefault();
+
+    const payload = extractPayload(event);
+    if (!payload) {
+      event.dataTransfer.dropEffect = 'copy';
+      return;
+    }
+
+    if (!canDropOnTarget(nodes, targetId, payload.type)) {
+      event.dataTransfer.dropEffect = 'none';
+      return;
+    }
+
+    if (payload.mode === 'move' && payload.nodeId && targetId && isDescendant(nodes, payload.nodeId, targetId)) {
+      event.dataTransfer.dropEffect = 'none';
+      return;
+    }
+
+    event.dataTransfer.dropEffect = payload.mode === 'new' ? 'copy' : 'move';
+  };
+
+  const handleDrop = (event: React.DragEvent, targetId: string | null) => {
+    const types = Array.from(event.dataTransfer.types);
+    if (!types.includes(dropDataMime)) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
-    try {
-      const payload = JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
-      if (!canDropOnTarget(nodes, targetId, payload.type)) {
+
+    const payload = extractPayload(event);
+    if (!payload) {
+      return;
+    }
+
+    if (!canDropOnTarget(nodes, targetId, payload.type)) {
+      return;
+    }
+
+    if (payload.mode === 'new') {
+      onDropNew(targetId, payload.type);
+    } else if (payload.mode === 'move' && payload.nodeId) {
+      if (targetId && isDescendant(nodes, payload.nodeId, targetId)) {
         return;
       }
-      if (payload.mode === 'new') {
-        onDropNew(targetId, payload.type);
-      } else if (payload.mode === 'move' && payload.nodeId) {
-        if (targetId && isDescendant(nodes, payload.nodeId, targetId)) {
-          return;
-        }
-        onMoveNode(payload.nodeId, targetId);
-      }
-    } catch (error) {
-      // ignore malformed data
+      onMoveNode(payload.nodeId, targetId);
     }
   };
 
