@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   Checkbox,
@@ -21,11 +21,24 @@ interface BuilderCanvasProps {
   nodes: BuilderNode[];
   selectedId?: string;
   onSelect: (id: string) => void;
-  onDropNew: (targetId: string | null, type: ComponentType) => void;
-  onMoveNode: (nodeId: string, targetId: string | null) => void;
+  onDropNew: (targetId: string | null, index: number | null, type: ComponentType) => void;
+  onMoveNode: (nodeId: string, targetId: string | null, index: number | null) => void;
 }
 
 const dropDataMime = 'application/x-builder';
+
+type DropMode = 'new' | 'move';
+
+interface DropPayload {
+  mode: DropMode;
+  type: ComponentType;
+  nodeId?: string;
+}
+
+interface DropTarget {
+  parentId: string | null;
+  index: number | null;
+}
 
 const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   nodes,
@@ -34,82 +47,153 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onDropNew,
   onMoveNode,
 }) => {
-  const handleDragOver = (event: React.DragEvent, targetId: string | null) => {
-    const hasBuilderData = Array.from(event.dataTransfer.types).includes(dropDataMime);
-    if (!hasBuilderData) {
-      return;
+  const [activeDropZone, setActiveDropZone] = useState<DropTarget | null>(null);
+
+  const dropTargetsEqual = (a: DropTarget | null, b: DropTarget | null) => {
+    if (!a || !b) {
+      return a === b;
     }
-
-    let allowDrop = true;
-    let dropEffect: DataTransfer['dropEffect'] = 'move';
-
-    try {
-      const raw = event.dataTransfer.getData(dropDataMime);
-      if (raw) {
-        const payload = JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
-        if (!canDropOnTarget(nodes, targetId, payload.type)) {
-          allowDrop = false;
-        } else if (
-          payload.mode === 'move' &&
-          payload.nodeId &&
-          targetId &&
-          isDescendant(nodes, payload.nodeId, targetId)
-        ) {
-          allowDrop = false;
-        } else {
-          dropEffect = payload.mode === 'new' ? 'copy' : 'move';
-        }
-      } else {
-        dropEffect = 'copy';
-      }
-    } catch (error) {
-      dropEffect = 'copy';
-    }
-
-    if (!allowDrop) {
-      event.dataTransfer.dropEffect = 'none';
-      return;
-    }
-
-    event.preventDefault();
-    event.dataTransfer.dropEffect = dropEffect;
+    return a.parentId === b.parentId && a.index === b.index;
   };
 
-  const handleDrop = (event: React.DragEvent, targetId: string | null) => {
+  const getDropPayload = (event: React.DragEvent): DropPayload | null => {
     const raw =
       event.dataTransfer.getData(dropDataMime) || event.dataTransfer.getData('text/plain');
     if (!raw) {
+      return null;
+    }
+    try {
+      return JSON.parse(raw) as DropPayload;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const evaluateDrop = (
+    event: React.DragEvent,
+    target: DropTarget
+  ): { allow: boolean; dropEffect: DataTransfer['dropEffect']; payload?: DropPayload } => {
+    const hasBuilderData = Array.from(event.dataTransfer.types).includes(dropDataMime);
+    if (!hasBuilderData) {
+      return { allow: false, dropEffect: 'none' };
+    }
+    const payload = getDropPayload(event);
+    if (!payload) {
+      return { allow: true, dropEffect: 'copy' };
+    }
+    if (!canDropOnTarget(nodes, target.parentId, payload.type)) {
+      return { allow: false, dropEffect: 'none' };
+    }
+    if (payload.mode === 'move') {
+      if (!payload.nodeId) {
+        return { allow: false, dropEffect: 'none' };
+      }
+      if (target.parentId && isDescendant(nodes, payload.nodeId, target.parentId)) {
+        return { allow: false, dropEffect: 'none' };
+      }
+      if (target.parentId === payload.nodeId) {
+        return { allow: false, dropEffect: 'none' };
+      }
+      return { allow: true, dropEffect: 'move', payload };
+    }
+    return { allow: true, dropEffect: 'copy', payload };
+  };
+
+  const handleDragOver = (event: React.DragEvent, target: DropTarget) => {
+    const { allow, dropEffect } = evaluateDrop(event, target);
+    if (!allow) {
+      event.dataTransfer.dropEffect = 'none';
+      return false;
+    }
+    event.preventDefault();
+    event.dataTransfer.dropEffect = dropEffect;
+    return true;
+  };
+
+  const handleDragEnter = (event: React.DragEvent, target: DropTarget) => {
+    if (handleDragOver(event, target) && !dropTargetsEqual(activeDropZone, target)) {
+      setActiveDropZone(target);
+    }
+  };
+
+  const handleDragLeave = (event: React.DragEvent, target: DropTarget) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    if (dropTargetsEqual(activeDropZone, target)) {
+      setActiveDropZone(null);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent, target: DropTarget) => {
+    const payload = getDropPayload(event);
+    if (!payload) {
+      setActiveDropZone(null);
       return;
     }
     event.preventDefault();
     event.stopPropagation();
-    try {
-      const payload = JSON.parse(raw) as { mode: string; type: ComponentType; nodeId?: string };
-      if (!canDropOnTarget(nodes, targetId, payload.type)) {
+    if (!canDropOnTarget(nodes, target.parentId, payload.type)) {
+      setActiveDropZone(null);
+      return;
+    }
+    if (payload.mode === 'new') {
+      onDropNew(target.parentId, target.index, payload.type);
+    } else if (payload.mode === 'move' && payload.nodeId) {
+      if (target.parentId && isDescendant(nodes, payload.nodeId, target.parentId)) {
+        setActiveDropZone(null);
         return;
       }
-      if (payload.mode === 'new') {
-        onDropNew(targetId, payload.type);
-      } else if (payload.mode === 'move' && payload.nodeId) {
-        if (targetId && isDescendant(nodes, payload.nodeId, targetId)) {
-          return;
-        }
-        onMoveNode(payload.nodeId, targetId);
-      }
-    } catch (error) {
-      // ignore malformed data
+      onMoveNode(payload.nodeId, target.parentId, target.index);
     }
+    setActiveDropZone(null);
   };
 
-  const renderChildren = (children: BuilderNode[] | undefined) => {
+  const renderDropZone = (parentId: string | null, index: number) => {
+    const target: DropTarget = { parentId, index };
+    const isActive = dropTargetsEqual(activeDropZone, target);
+    return (
+      <div
+        key={`drop-${parentId ?? 'root'}-${index}`}
+        className={`builder-drop-zone${isActive ? ' builder-drop-zone-active' : ''}`}
+        onDragEnter={(event) => handleDragEnter(event, target)}
+        onDragOver={(event) => handleDragOver(event, target)}
+        onDragLeave={(event) => handleDragLeave(event, target)}
+        onDrop={(event) => handleDrop(event, target)}
+      />
+    );
+  };
+
+  const renderEmptyPlaceholder = (parentId: string | null) => {
+    const target: DropTarget = { parentId, index: 0 };
+    const isActive = dropTargetsEqual(activeDropZone, target);
+    return (
+      <div
+        key={`placeholder-${parentId ?? 'root'}`}
+        className={`builder-drop-placeholder${isActive ? ' builder-drop-placeholder-active' : ''}`}
+        data-placeholder
+        onDragEnter={(event) => handleDragEnter(event, target)}
+        onDragOver={(event) => handleDragOver(event, target)}
+        onDragLeave={(event) => handleDragLeave(event, target)}
+        onDrop={(event) => handleDrop(event, target)}
+      >
+        Drop components here
+      </div>
+    );
+  };
+
+  const renderChildren = (parentId: string | null, children: BuilderNode[] | undefined) => {
     if (!children || children.length === 0) {
-      return (
-        <div className="builder-drop-placeholder" data-placeholder>
-          Drop components here
-        </div>
-      );
+      return renderEmptyPlaceholder(parentId);
     }
-    return children.map((child) => renderNode(child));
+    const fragments: React.ReactNode[] = [];
+    children.forEach((child, index) => {
+      fragments.push(renderDropZone(parentId, index));
+      fragments.push(renderNode(child));
+    });
+    fragments.push(renderDropZone(parentId, children.length));
+    return fragments;
   };
 
   const renderContent = (node: BuilderNode, children: React.ReactNode) => {
@@ -191,8 +275,12 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
     const droppableProps = config.supportsChildren
       ? {
-          onDragOver: (event: React.DragEvent) => handleDragOver(event, node.id),
-          onDrop: (event: React.DragEvent) => handleDrop(event, node.id),
+          onDragEnter: (event: React.DragEvent) =>
+            handleDragEnter(event, { parentId: node.id, index: null }),
+          onDragOver: (event: React.DragEvent) => handleDragOver(event, { parentId: node.id, index: null }),
+          onDragLeave: (event: React.DragEvent) =>
+            handleDragLeave(event, { parentId: node.id, index: null }),
+          onDrop: (event: React.DragEvent) => handleDrop(event, { parentId: node.id, index: null }),
         }
       : undefined;
 
@@ -200,8 +288,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       <div
         key={node.id}
         className={className}
+        data-node-type={node.type}
         draggable
         onDragStart={handleNodeDragStart}
+        onDragEnd={() => setActiveDropZone(null)}
         onClick={(event) => {
           event.stopPropagation();
           onSelect(node.id);
@@ -211,7 +301,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           <>
             <div className="builder-node-label">{config.label}</div>
             <div className="builder-node-body" {...droppableProps}>
-              {renderContent(node, renderChildren(node.children))}
+              {renderContent(node, renderChildren(node.id, node.children))}
             </div>
           </>
         ) : (
@@ -223,16 +313,23 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
     );
   };
 
+  const rootTarget: DropTarget = { parentId: null, index: null };
+
   return (
     <div
       className="builder-canvas"
-      onDragOver={(event) => handleDragOver(event, null)}
-      onDrop={(event) => handleDrop(event, null)}
+      onDragEnter={(event) => handleDragEnter(event, rootTarget)}
+      onDragOver={(event) => handleDragOver(event, rootTarget)}
+      onDragLeave={(event) => handleDragLeave(event, rootTarget)}
+      onDrop={(event) => handleDrop(event, rootTarget)}
     >
       {nodes.length === 0 ? (
-        <Empty description="Drag components here" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        <div className="builder-empty-root" data-placeholder>
+          <Empty description="Drag components here" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          {renderDropZone(null, 0)}
+        </div>
       ) : (
-        nodes.map((node) => renderNode(node))
+        <>{renderChildren(null, nodes)}</>
       )}
     </div>
   );

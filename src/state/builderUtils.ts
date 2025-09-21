@@ -62,21 +62,34 @@ export const removeNode = (
   return { nodes: next, removed };
 };
 
+const insertAt = <T,>(list: T[], index: number | null | undefined, item: T): T[] => {
+  const next = [...list];
+  if (index === null || index === undefined) {
+    next.push(item);
+    return next;
+  }
+  const clampedIndex = Math.max(0, Math.min(index, next.length));
+  next.splice(clampedIndex, 0, item);
+  return next;
+};
+
 export const addChildNode = (
   nodes: BuilderNode[],
   targetId: string | null,
-  newNode: BuilderNode
+  newNode: BuilderNode,
+  index?: number | null
 ): BuilderNode[] => {
   if (targetId === null) {
-    return [...nodes, newNode];
+    return insertAt(nodes, index, newNode);
   }
   return nodes.map((node) => {
     if (node.id === targetId) {
-      const children = node.children ? [...node.children, newNode] : [newNode];
-      return { ...node, children };
+      const children = node.children ? [...node.children] : [];
+      const nextChildren = insertAt(children, index, newNode);
+      return { ...node, children: nextChildren };
     }
     if (node.children) {
-      return { ...node, children: addChildNode(node.children, targetId, newNode) };
+      return { ...node, children: addChildNode(node.children, targetId, newNode, index) };
     }
     return node;
   });
@@ -127,4 +140,29 @@ export const isDescendant = (nodes: BuilderNode[], parentId: string, possibleChi
     }
   }
   return false;
+};
+
+export interface NodeLocation {
+  parentId: string | null;
+  index: number;
+}
+
+export const findNodeLocation = (
+  nodes: BuilderNode[],
+  id: string,
+  parentId: string | null = null
+): NodeLocation | undefined => {
+  for (let index = 0; index < nodes.length; index += 1) {
+    const node = nodes[index];
+    if (node.id === id) {
+      return { parentId, index };
+    }
+    if (node.children) {
+      const childLocation = findNodeLocation(node.children, id, node.id);
+      if (childLocation) {
+        return childLocation;
+      }
+    }
+  }
+  return undefined;
 };
