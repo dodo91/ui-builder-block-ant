@@ -173,7 +173,12 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   const renderNode = (node: BuilderNode) => {
     const config = componentRegistry[node.type];
     const isSelected = selectedId === node.id;
-    const className = ['builder-node', isSelected ? 'builder-node-selected' : '', config.supportsChildren ? 'builder-node-container' : '']
+    const isContainer = config.supportsChildren;
+    const className = [
+      'builder-node',
+      isSelected ? 'builder-node-selected' : '',
+      isContainer ? 'builder-node-container' : 'builder-node-leaf',
+    ]
       .filter(Boolean)
       .join(' ');
 
@@ -202,10 +207,18 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           onSelect(node.id);
         }}
       >
-        <div className="builder-node-label">{config.label}</div>
-        <div className="builder-node-body" {...droppableProps}>
-          {renderContent(node, renderChildren(node.children))}
-        </div>
+        {isContainer ? (
+          <>
+            <div className="builder-node-label">{config.label}</div>
+            <div className="builder-node-body" {...droppableProps}>
+              {renderContent(node, renderChildren(node.children))}
+            </div>
+          </>
+        ) : (
+          <div className="builder-node-body builder-node-leaf-body">
+            {renderContent(node, null)}
+          </div>
+        )}
       </div>
     );
   };

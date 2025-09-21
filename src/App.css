@@ -61,20 +61,19 @@
 }
 
 .builder-node {
+  position: relative;
+  cursor: grab;
+  border-radius: 8px;
+}
+
+.builder-node-container {
   background: #ffffff;
   border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 8px;
   padding: 12px;
-  position: relative;
-  cursor: grab;
 }
 
-.builder-node-selected {
-  border-color: #1677ff;
-  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
-}
-
-.builder-node-label {
+.builder-node-container .builder-node-label {
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
@@ -83,15 +82,52 @@
   margin-bottom: 8px;
 }
 
-.builder-node-body {
+.builder-node-container .builder-node-body {
   background: rgba(15, 23, 42, 0.02);
   border-radius: 6px;
   padding: 12px;
   min-height: 48px;
 }
 
+
 .builder-node-container .builder-node-body {
   min-height: 80px;
+}
+
+.builder-node-selected.builder-node-container {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
+}
+
+.builder-node-leaf {
+  display: inline-block;
+  vertical-align: top;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.builder-node-leaf:hover {
+  border-color: rgba(15, 23, 42, 0.12);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.builder-node-leaf-body {
+  background: transparent;
+  padding: 0;
+  min-height: 0;
+}
+
+.builder-node-leaf-body > * {
+  pointer-events: none;
+}
+
+.builder-node-leaf.builder-node-selected {
+  border-color: #1677ff;
+  box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.2);
+  background: rgba(22, 119, 255, 0.04);
 }
 
 .builder-drop-placeholder {
