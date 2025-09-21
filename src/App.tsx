@@ -48,7 +48,6 @@ function App() {
       if (targetId === nodeId) {
         return prev;
       }
-      const targetNode = targetId ? findNodeById(prev, targetId) : undefined;
       const movingNode = findNodeById(prev, nodeId);
       if (!movingNode) {
         return prev;
@@ -61,9 +60,6 @@ function App() {
       const sourceLocation = findNodeLocation(prev, nodeId);
       const { nodes: withoutNode, removed } = removeNode(prev, nodeId);
       if (!removed) {
-        return prev;
-      }
-      if (targetNode && targetNode.children?.some((child) => child.id === nodeId)) {
         return prev;
       }
       let nextIndex = index;
