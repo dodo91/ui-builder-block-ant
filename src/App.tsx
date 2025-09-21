@@ -11,6 +11,7 @@ import {
   canDropOnTarget,
   createNodeFromType,
   findNodeById,
+  findNodeLocation,
   removeNode,
   updateNodeProps,
 } from './state/builderUtils';
@@ -29,20 +30,20 @@ function App() {
     return findNodeById(nodes, selectedId);
   }, [nodes, selectedId]);
 
-  const handleDropNew = (targetId: string | null, type: ComponentType) => {
+  const handleDropNew = (targetId: string | null, index: number | null, type: ComponentType) => {
     setNodes((prev) => {
       if (!canDropOnTarget(prev, targetId, type)) {
         messageApi.warning('Drop target does not accept this component.');
         return prev;
       }
       const newNode = createNodeFromType(type);
-      const next = addChildNode(prev, targetId, newNode);
+      const next = addChildNode(prev, targetId, newNode, index ?? undefined);
       setSelectedId(newNode.id);
       return next;
     });
   };
 
-  const handleMoveNode = (nodeId: string, targetId: string | null) => {
+  const handleMoveNode = (nodeId: string, targetId: string | null, index: number | null) => {
     setNodes((prev) => {
       if (targetId === nodeId) {
         return prev;
@@ -57,6 +58,7 @@ function App() {
         messageApi.warning('Cannot move component to the selected area.');
         return prev;
       }
+      const sourceLocation = findNodeLocation(prev, nodeId);
       const { nodes: withoutNode, removed } = removeNode(prev, nodeId);
       if (!removed) {
         return prev;
@@ -64,11 +66,20 @@ function App() {
       if (targetNode && targetNode.children?.some((child) => child.id === nodeId)) {
         return prev;
       }
+      let nextIndex = index;
+      if (sourceLocation && sourceLocation.parentId === targetId && nextIndex !== null && nextIndex !== undefined) {
+        if (nextIndex > sourceLocation.index) {
+          nextIndex -= 1;
+        }
+        if (nextIndex === sourceLocation.index) {
+          return prev;
+        }
+      }
       const sanitizedNode: BuilderNode = {
         ...removed,
         children: removed.children ? [...removed.children] : undefined,
       };
-      const next = addChildNode(withoutNode, targetId, sanitizedNode);
+      const next = addChildNode(withoutNode, targetId, sanitizedNode, nextIndex ?? undefined);
       setSelectedId(nodeId);
       return next;
     });
